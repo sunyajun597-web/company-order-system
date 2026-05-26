@@ -1,0 +1,13 @@
+{
+  "name": "company-order-system",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node tools/preview-server.mjs",
+    "start": "node tools/preview-server.mjs",
+    "build": "node tools/build.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}
