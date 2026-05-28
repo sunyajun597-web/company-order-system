@@ -1,4 +1,5 @@
 const STORAGE_KEY = "onion-order-system-v3";
+const BRAND_LOGO = "assets/onion-vision-logo.png";
 
 const labels = {
   admin: "管理员",
@@ -328,7 +329,7 @@ function render() {
   document.querySelector("#app").innerHTML = `
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-mark">洋</div>
+        <img class="brand-mark" src="${BRAND_LOGO}" alt="洋葱视觉 logo">
         <div><strong>洋葱视觉</strong><span>业务订单系统</span></div>
       </div>
       <nav>${navItems().map(([id, label, iconName]) => `
@@ -355,7 +356,7 @@ function loginView(error = "") {
   return `
     <main class="login-screen">
       <section class="login-card">
-        <div class="brand login-brand"><div class="brand-mark">洋</div><div><strong>洋葱视觉</strong><span>业务订单系统</span></div></div>
+        <div class="brand login-brand"><img class="brand-mark" src="${BRAND_LOGO}" alt="洋葱视觉 logo"><div><strong>洋葱视觉</strong><span>业务订单系统</span></div></div>
         <form data-form="login">
           <label><span>账号邮箱</span><input name="email" type="email" value="admin@onion.local" required></label>
           <label><span>密码</span><input name="password" type="password" value="admin123" required></label>
