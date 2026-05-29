@@ -30,6 +30,7 @@ const seed = {
   activeView: "dashboard",
   expandedProjectId: "p_1",
   showProjectForm: false,
+  attachmentPreview: null,
   serviceTypes: [
     { id: "film", name: "影视拍摄" },
     { id: "live", name: "直播转播" },
@@ -78,6 +79,7 @@ const seed = {
     { id: "r_1", employeeId: "u_wu", projectId: "p_2", category: "交通报销", amount: 680, occurredOn: "2026-05-25", status: "pending", reason: "直播项目现场勘景往返油费", approvedBy: "", approvedAt: "" },
     { id: "r_2", employeeId: "u_zhang", projectId: "p_1", category: "餐补报销", amount: 320, occurredOn: "2026-05-24", status: "approved", reason: "客户会议及拍摄筹备", approvedBy: "u_admin", approvedAt: "2026-05-25" }
   ],
+  attachments: [],
   salaries: [
     { id: "s_1", employeeId: "u_zhang", month: "2026-05", baseAmount: 8000, bonusAmount: 2600, reimbursementAmount: 320, commissionAmount: 6080, deductionAmount: 0, status: "confirmed", notes: "拍摄项目绩效" },
     { id: "s_2", employeeId: "u_wu", month: "2026-05", baseAmount: 7800, bonusAmount: 1800, reimbursementAmount: 0, commissionAmount: 3100, deductionAmount: 0, status: "draft", notes: "待直播项目结算" },
@@ -104,6 +106,7 @@ function migrate(data) {
   next.customerSources ||= structuredClone(seed.customerSources);
   next.subprojects ||= structuredClone(seed.subprojects);
   next.commissionRules ||= structuredClone(seed.commissionRules);
+  next.attachments ||= [];
   next.users = next.users.map((user) => ({ password: user.role === "admin" ? "admin123" : "123456", ...user }));
   next.salaries = next.salaries.map((item) => ({ commissionAmount: 0, ...item }));
   next.subprojects = next.subprojects.map((item) => {
@@ -202,6 +205,14 @@ function visibleTasks() {
 
 function visibleReimbursements() {
   return isAdmin() ? state.reimbursements : state.reimbursements.filter((item) => item.employeeId === currentUser()?.id);
+}
+
+function attachmentsFor(entityType, entityId) {
+  return state.attachments.filter((item) => item.entityType === entityType && item.entityId === entityId);
+}
+
+function canDeleteAttachment(item) {
+  return isAdmin() || item.uploadedBy === currentUser()?.id;
 }
 
 function visibleSalaries() {
@@ -348,7 +359,8 @@ function render() {
         <div class="top-actions"><button class="ghost" data-action="reset">重置演示数据</button><button class="primary" data-action="new-project">新建项目单</button></div>
       </header>
       <section class="content">${view()}</section>
-    </main>`;
+    </main>
+    ${attachmentModal()}`;
   bindEvents();
 }
 
@@ -501,20 +513,20 @@ function finance() {
       const costAmount = sum(projectCosts, "amount");
       return [project.name, money(projectContract(project)), money(projectPaid(project.id)), money(costAmount), money(projectContract(project) - costAmount)];
     }))}</section>
-    <div class="split"><section class="panel"><div class="panel-head"><h2>订单成本</h2><span>非报销，关联到项目成本</span></div>${simpleTable(["项目", "业务明细", "类别", "供应商/外协", "金额", "日期"], costs.map((item) => [projectName(item.projectId), subprojectName(item.subprojectId), item.category, item.vendor, money(item.amount), item.occurredOn]))}</section><section class="panel"><div class="panel-head"><h2>报销支出</h2><span>员工提交，审批后计入</span></div>${simpleTable(["员工", "项目", "类别", "金额", "日期", "状态"], visibleReimbursements().map((item) => [userName(item.employeeId), projectName(item.projectId), item.category, money(item.amount), item.occurredOn, labels[item.status]]))}</section></div>
+    <div class="split"><section class="panel"><div class="panel-head"><h2>订单成本</h2><span>非报销，关联到项目成本</span></div>${simpleTable(["项目", "业务明细", "类别", "供应商/外协", "金额", "日期", "凭证"], costs.map((item) => [projectName(item.projectId), subprojectName(item.subprojectId), item.category, item.vendor, money(item.amount), item.occurredOn, attachmentButton("cost", item.id)]))}</section><section class="panel"><div class="panel-head"><h2>报销支出</h2><span>员工提交，审批后计入</span></div>${simpleTable(["员工", "项目", "类别", "金额", "日期", "状态", "凭证"], visibleReimbursements().map((item) => [userName(item.employeeId), projectName(item.projectId), item.category, money(item.amount), item.occurredOn, labels[item.status], attachmentButton("reimbursement", item.id)]))}</section></div>
     <section class="panel"><div class="panel-head"><h2>收款记录</h2></div>${simpleTable(["项目", "金额", "日期", "账户", "发票"], state.payments.filter((item) => visibleProjectIds.includes(item.projectId)).map((item) => [projectName(item.projectId), money(item.amount), item.paidOn, item.account, item.invoiceStatus]))}</section>
-    ${isAdmin() ? `<div class="split"><section class="panel form-panel"><div class="panel-head"><h2>登记收款</h2></div><form data-form="payment">${select("projectId", "项目", projects.map((item) => [item.id, item.name]))}${input("amount", "金额", "number", true)}${input("paidOn", "收款日期", "date")}${input("account", "账户", "text")}${input("method", "方式", "text")}${input("invoiceStatus", "发票状态", "text")}${textarea("notes", "备注")}<button class="primary full">保存收款</button></form></section><section class="panel form-panel"><div class="panel-head"><h2>登记订单成本</h2></div><form data-form="cost">${select("projectId", "项目", projects.map((item) => [item.id, item.name]))}${select("subprojectId", "业务明细", state.subprojects.map((item) => [item.id, `${projectName(item.projectId)} / ${item.name}`]))}${input("category", "成本类别", "text", true)}${input("vendor", "供应商/外协", "text")}${input("amount", "金额", "number", true)}${input("occurredOn", "发生日期", "date")}${textarea("notes", "备注")}<button class="primary full">保存成本</button></form></section></div>` : ""}`;
+    ${isAdmin() ? `<div class="split"><section class="panel form-panel"><div class="panel-head"><h2>登记收款</h2></div><form data-form="payment">${select("projectId", "项目", projects.map((item) => [item.id, item.name]))}${input("amount", "金额", "number", true)}${input("paidOn", "收款日期", "date")}${input("account", "账户", "text")}${input("method", "方式", "text")}${input("invoiceStatus", "发票状态", "text")}${textarea("notes", "备注")}<button class="primary full">保存收款</button></form></section><section class="panel form-panel"><div class="panel-head"><h2>登记订单成本</h2></div><form data-form="cost">${select("projectId", "项目", projects.map((item) => [item.id, item.name]))}${select("subprojectId", "业务明细", state.subprojects.map((item) => [item.id, `${projectName(item.projectId)} / ${item.name}`]))}${input("category", "成本类别", "text", true)}${input("vendor", "供应商/外协", "text")}${input("amount", "金额", "number", true)}${input("occurredOn", "发生日期", "date")}${imageUpload()}${textarea("notes", "备注")}<button class="primary full">保存成本</button></form></section></div>` : ""}`;
 }
 
 function salary() {
   const commissionRows = visibleSubprojects().flatMap(lineCommissionRows).map((item) => [userName(item.employeeId), item.role, projectName(item.projectId), item.lineName, serviceName(item.serviceType), money(item.baseAmount), `${item.rate}%`, money(item.commission)]);
   return `
-    <div class="split"><section class="panel"><div class="panel-head"><h2>报销审批</h2><span>${visibleReimbursements().length} 条</span></div><div class="cards">${visibleReimbursements().map((item) => `<article class="mini-card"><div><strong>${userName(item.employeeId)} · ${item.category}</strong><span>${projectName(item.projectId)}</span></div><b>${money(item.amount)}</b><p>${item.reason}</p><footer><span class="status ${item.status}">${labels[item.status]}</span>${isAdmin() && item.status === "pending" ? `<button data-approve="${item.id}">通过</button><button class="danger" data-reject="${item.id}">驳回</button>` : ""}</footer></article>`).join("")}</div></section><section class="panel"><div class="panel-head"><h2>员工提成列表</h2></div>${simpleTable(["员工", "角色", "项目", "业务内容", "业务", "金额基数", "比例", "预计提成"], commissionRows)}</section></div>
+    <div class="split"><section class="panel"><div class="panel-head"><h2>报销审批</h2><span>${visibleReimbursements().length} 条</span></div><div class="cards">${visibleReimbursements().map((item) => `<article class="mini-card"><div><strong>${userName(item.employeeId)} · ${item.category}</strong><span>${projectName(item.projectId)}</span></div><b>${money(item.amount)}</b><p>${item.reason}</p><div class="attachment-line"><span>图片凭证</span>${attachmentButton("reimbursement", item.id)}</div><footer><span class="status ${item.status}">${labels[item.status]}</span>${isAdmin() && item.status === "pending" ? `<button data-approve="${item.id}">通过</button><button class="danger" data-reject="${item.id}">驳回</button>` : ""}</footer></article>`).join("")}</div></section><section class="panel"><div class="panel-head"><h2>员工提成列表</h2></div>${simpleTable(["员工", "角色", "项目", "业务内容", "业务", "金额基数", "比例", "预计提成"], commissionRows)}</section></div>
     <section class="panel"><div class="panel-head"><h2>工资记录</h2><span>标准工资文件稍后可按这些字段导入</span></div>${simpleTable(["员工", "月份", "基本", "绩效", "提成", "报销", "扣款", "合计", "状态"], visibleSalaries().map((item) => {
       const total = Number(item.baseAmount) + Number(item.bonusAmount) + Number(item.commissionAmount) + Number(item.reimbursementAmount) - Number(item.deductionAmount);
       return [userName(item.employeeId), item.month, money(item.baseAmount), money(item.bonusAmount), money(item.commissionAmount), money(item.reimbursementAmount), money(item.deductionAmount), money(total), labels[item.status] || item.status];
     }))}</section>
-    <div class="split"><section class="panel form-panel"><div class="panel-head"><h2>提交报销</h2></div><form data-form="reimbursement">${select("projectId", "项目", visibleProjects().map((item) => [item.id, item.name]))}${input("category", "报销类别", "text", true)}${input("amount", "金额", "number", true)}${input("occurredOn", "发生日期", "date")}${textarea("reason", "事由")}<button class="primary full">提交报销</button></form></section>${isAdmin() ? `<section class="panel form-panel"><div class="panel-head"><h2>录入工资</h2></div><form data-form="salary">${selectUsers("employeeId", "员工")}${input("month", "月份", "month", true)}${input("baseAmount", "基本工资", "number")}${input("bonusAmount", "绩效奖金", "number")}${input("commissionAmount", "提成金额", "number")}${input("reimbursementAmount", "报销计入", "number")}${input("deductionAmount", "扣款", "number")}${select("status", "状态", [["draft", "草稿"], ["confirmed", "已确认"]])}${textarea("notes", "备注")}<button class="primary full">保存工资</button></form><div class="import-note">工资标准文件收到后，会按：员工、月份、基本工资、绩效、提成、报销、扣款、备注 这些字段接入导入。</div></section>` : ""}</div>`;
+    <div class="split"><section class="panel form-panel"><div class="panel-head"><h2>提交报销</h2></div><form data-form="reimbursement">${select("projectId", "项目", visibleProjects().map((item) => [item.id, item.name]))}${input("category", "报销类别", "text", true)}${input("amount", "金额", "number", true)}${input("occurredOn", "发生日期", "date")}${imageUpload()}${textarea("reason", "事由")}<button class="primary full">提交报销</button></form></section>${isAdmin() ? `<section class="panel form-panel"><div class="panel-head"><h2>录入工资</h2></div><form data-form="salary">${selectUsers("employeeId", "员工")}${input("month", "月份", "month", true)}${input("baseAmount", "基本工资", "number")}${input("bonusAmount", "绩效奖金", "number")}${input("commissionAmount", "提成金额", "number")}${input("reimbursementAmount", "报销计入", "number")}${input("deductionAmount", "扣款", "number")}${select("status", "状态", [["draft", "草稿"], ["confirmed", "已确认"]])}${textarea("notes", "备注")}<button class="primary full">保存工资</button></form><div class="import-note">工资标准文件收到后，会按：员工、月份、基本工资、绩效、提成、报销、扣款、备注 这些字段接入导入。</div></section>` : ""}</div>`;
 }
 
 function targets() {
@@ -569,6 +581,25 @@ function pieChart(title, segments) {
   return `<div class="pie-block"><div class="pie" style="background: conic-gradient(${gradient});"><span>${title}</span></div><div class="legend">${segments.map((item) => `<div><i style="background:${item.color}"></i><span>${item.label}</span><b>${Math.round((Number(item.value || 0) / total) * 100)}%</b></div>`).join("")}</div></div>`;
 }
 
+function attachmentButton(entityType, entityId) {
+  const items = attachmentsFor(entityType, entityId);
+  if (!items.length) return `<span class="muted">无</span>`;
+  const preview = items.slice(0, 3).map((item) => `<img src="${item.fileData}" alt="${item.fileName}">`).join("");
+  return `<button type="button" class="attachment-pill" data-view-attachments="${entityType}:${entityId}"><span>${items.length} 张</span>${preview}</button>`;
+}
+
+function attachmentModal() {
+  const target = state.attachmentPreview;
+  if (!target) return "";
+  const items = attachmentsFor(target.entityType, target.entityId);
+  return `<div class="modal-backdrop" data-close-attachments>
+    <section class="modal-panel attachment-modal">
+      <div class="panel-head"><div><h2>图片凭证</h2><span>${items.length} 张图片</span></div><button type="button" class="ghost" data-close-attachments>关闭</button></div>
+      ${items.length ? `<div class="attachment-grid">${items.map((item) => `<figure class="attachment-card"><img src="${item.fileData}" alt="${item.fileName}"><figcaption><span>${item.fileName}</span><small>${userName(item.uploadedBy)} · ${item.createdAt}</small>${canDeleteAttachment(item) ? `<button type="button" class="danger" data-delete-attachment="${item.id}">删除</button>` : ""}</figcaption></figure>`).join("")}</div>` : `<div class="empty">暂无图片凭证</div>`}
+    </section>
+  </div>`;
+}
+
 function simpleTable(headers, rows) {
   if (!rows.length) return `<div class="empty">暂无数据</div>`;
   return `<div class="table-wrap"><table><thead><tr>${headers.map((item) => `<th>${item}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${row.map((cell) => `<td>${cell || "-"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
@@ -580,6 +611,10 @@ function input(name, label, type = "text", required = false) {
 
 function textarea(name, label) {
   return `<label class="span-2"><span>${label}</span><textarea name="${name}" rows="3"></textarea></label>`;
+}
+
+function imageUpload(name = "images") {
+  return `<label class="span-2"><span>图片凭证</span><input name="${name}" type="file" accept="image/*" multiple><small class="field-hint">可一次选择多张图片，保存后可在列表中预览和删除。</small></label>`;
 }
 
 function selectUsers(name, label) {
@@ -654,15 +689,26 @@ function bindEvents() {
     state.expandedProjectId = state.expandedProjectId === row.dataset.toggleProject ? "" : row.dataset.toggleProject;
     saveState();
   }));
-  document.querySelectorAll("form").forEach((form) => form.addEventListener("submit", (event) => {
+  document.querySelectorAll("form").forEach((form) => form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    handleForm(form.dataset.form, formData(form), form);
+    await handleForm(form.dataset.form, formData(form), form);
   }));
   document.querySelectorAll("[data-add]").forEach((button) => button.addEventListener("click", () => handleQuickAdd(button.dataset.add, button.dataset.target)));
   document.querySelectorAll("[data-detail-row] input").forEach((input) => input.addEventListener("input", updateDetailTotals));
   updateDetailTotals();
   document.querySelectorAll("[data-approve]").forEach((button) => button.addEventListener("click", () => updateReimbursement(button.dataset.approve, "approved")));
   document.querySelectorAll("[data-reject]").forEach((button) => button.addEventListener("click", () => updateReimbursement(button.dataset.reject, "rejected")));
+  document.querySelectorAll("[data-view-attachments]").forEach((button) => button.addEventListener("click", () => {
+    const [entityType, entityId] = button.dataset.viewAttachments.split(":");
+    state.attachmentPreview = { entityType, entityId };
+    saveState();
+  }));
+  document.querySelectorAll("[data-close-attachments]").forEach((item) => item.addEventListener("click", (event) => {
+    if (event.target !== item && item.classList.contains("modal-backdrop")) return;
+    state.attachmentPreview = null;
+    saveState();
+  }));
+  document.querySelectorAll("[data-delete-attachment]").forEach((button) => button.addEventListener("click", () => deleteAttachment(button.dataset.deleteAttachment)));
 }
 
 function normalizeCustomService(data) {
@@ -744,11 +790,49 @@ function collectDetailLines(form, projectId, status) {
   }).filter(Boolean);
 }
 
-function handleForm(type, data, form) {
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function collectImageAttachments(form, entityType, entityId) {
+  const files = [...(form.querySelector(`[name="images"]`)?.files || [])].filter((file) => file.type.startsWith("image/"));
+  if (!files.length) return [];
+  return Promise.all(files.map(async (file) => ({
+    id: uid("att"),
+    entityType,
+    entityId,
+    fileName: file.name,
+    fileType: file.type,
+    fileData: await fileToDataUrl(file),
+    uploadedBy: currentUser().id,
+    createdAt: new Date().toLocaleString("zh-CN")
+  })));
+}
+
+async function addImageAttachments(form, entityType, entityId) {
+  const items = await collectImageAttachments(form, entityType, entityId);
+  state.attachments.push(...items);
+  return items.length;
+}
+
+function deleteAttachment(id) {
+  const item = state.attachments.find((entry) => entry.id === id);
+  if (!item || !canDeleteAttachment(item)) return;
+  state.attachments = state.attachments.filter((entry) => entry.id !== id);
+  saveState(`删除${item.entityType === "cost" ? "成本" : "报销"}凭证：${item.fileName}`);
+}
+
+async function handleForm(type, data, form) {
   const numeric = ["contractAmount", "budgetCost", "amount", "quantity", "unitPrice", "costBudget", "commissionRate", "rate", "baseAmount", "bonusAmount", "commissionAmount", "reimbursementAmount", "deductionAmount", "annualAmount", "q1Amount", "q2Amount", "q3Amount", "q4Amount"];
   numeric.forEach((key) => {
     if (key in data) data[key] = Number(data[key] || 0);
   });
+  delete data.images;
 
   if (type === "customer") {
     const source = data.source === "__custom" && data.customSource?.trim() ? data.customSource.trim() : data.source;
@@ -795,13 +879,17 @@ function handleForm(type, data, form) {
   }
 
   if (type === "cost") {
-    state.costs.push({ id: uid("co"), ...data });
-    return saveState(`登记订单成本：${money(data.amount)}`);
+    const costId = uid("co");
+    state.costs.push({ id: costId, ...data });
+    const imageCount = await addImageAttachments(form, "cost", costId);
+    return saveState(`登记订单成本：${money(data.amount)}${imageCount ? `，上传${imageCount}张凭证` : ""}`);
   }
 
   if (type === "reimbursement") {
-    state.reimbursements.push({ id: uid("r"), employeeId: currentUser().id, status: "pending", approvedBy: "", approvedAt: "", ...data });
-    return saveState(`提交报销：${money(data.amount)}`);
+    const reimbursementId = uid("r");
+    state.reimbursements.push({ id: reimbursementId, employeeId: currentUser().id, status: "pending", approvedBy: "", approvedAt: "", ...data });
+    const imageCount = await addImageAttachments(form, "reimbursement", reimbursementId);
+    return saveState(`提交报销：${money(data.amount)}${imageCount ? `，上传${imageCount}张凭证` : ""}`);
   }
 
   if (type === "salary") {

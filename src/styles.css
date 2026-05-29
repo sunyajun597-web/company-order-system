@@ -385,6 +385,97 @@ td strong {
   color: #9d2f2f;
 }
 
+.muted,
+.field-hint {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field-hint {
+  font-weight: 500;
+}
+
+.attachment-pill {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #f8fafb;
+  color: var(--text);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.attachment-pill img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid #d8e2e7;
+}
+
+.attachment-line {
+  display: flex !important;
+  grid-template-columns: none !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.attachment-modal {
+  width: min(980px, 100%);
+}
+
+.attachment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.attachment-card {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafb;
+}
+
+.attachment-card img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  display: block;
+  object-fit: contain;
+  background: #fff;
+}
+
+.attachment-card figcaption {
+  display: grid;
+  gap: 7px;
+  padding: 10px;
+}
+
+.attachment-card figcaption span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.attachment-card figcaption small {
+  color: var(--muted);
+}
+
+.attachment-card button {
+  justify-self: start;
+  min-height: 32px;
+  border-radius: 6px;
+  padding: 0 12px;
+  font-weight: 700;
+}
+
 .task-list,
 .goal-list,
 .cards {
